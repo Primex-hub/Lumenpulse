@@ -3,7 +3,8 @@ import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class EntityLinkingQueryDto {
   @ApiProperty({
-    description: 'Input text to resolve into known projects/assets/ecosystem entities',
+    description:
+      'Input text to resolve into known projects/assets/ecosystem entities',
     example: 'LumenPulse project tracks XLM and USDC in the Stellar ecosystem.',
   })
   @IsString()
