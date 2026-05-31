@@ -441,6 +441,9 @@ const envSchema = z
     WEBHOOK_SECRET: z.string().trim().optional(),
     WEBHOOK_PROVIDERS: z.string().trim().optional(),
 
+    SOROBAN_INGEST_SECRET: z.string().trim().optional(),
+    SOROBAN_TIMESTAMP_TOLERANCE_MS: z.coerce.number().int().min(1_000).optional(),
+
     TELEGRAM_BOT_TOKEN: z.string().trim().optional(),
     METRICS_ALLOWED_IPS: z.string().trim().optional(),
     USE_MOCK_TRANSACTIONS: z.preprocess(
@@ -841,6 +844,16 @@ const optionalSummary = [
     parsedEnv.WEBHOOK_PROVIDERS ? '[REDACTED]' : '(not set)',
   ],
   [
+    'SOROBAN_INGEST_SECRET',
+    parsedEnv.SOROBAN_INGEST_SECRET ? '[REDACTED]' : '(not set)',
+  ],
+  [
+    'SOROBAN_TIMESTAMP_TOLERANCE_MS',
+    String(
+      parsedEnv.SOROBAN_TIMESTAMP_TOLERANCE_MS ?? 300_000,
+    ),
+  ],
+  [
     'TELEGRAM_BOT_TOKEN',
     parsedEnv.TELEGRAM_BOT_TOKEN ? '[REDACTED]' : '(not set)',
   ],
@@ -1005,6 +1018,11 @@ export const config = Object.freeze({
     webhookSecret: parsedEnv.WEBHOOK_SECRET,
     webhookProviders: parsedEnv.WEBHOOK_PROVIDERS,
     telegramBotToken: parsedEnv.TELEGRAM_BOT_TOKEN,
+  }),
+  soroban: Object.freeze({
+    ingestSecret: parsedEnv.SOROBAN_INGEST_SECRET,
+    timestampToleranceMs:
+      parsedEnv.SOROBAN_TIMESTAMP_TOLERANCE_MS ?? 300_000,
   }),
   metrics: Object.freeze({
     allowedIps: Object.freeze(splitCsv(parsedEnv.METRICS_ALLOWED_IPS)),
