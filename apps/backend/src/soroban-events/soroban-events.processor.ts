@@ -43,7 +43,8 @@ export class SorobanEventsProcessor extends WorkerHost {
 
     if (existing) {
       this.logger.debug(
-        `Soroban event ${txHash}:${eventIndex} already processed (${existing.status}), skipping`,
+        { txHash, eventIndex, status: existing.status },
+        'Soroban event already processed, skipping',
       );
       return;
     }
@@ -94,7 +95,8 @@ export class SorobanEventsProcessor extends WorkerHost {
 
     await this.eventRepo.save(event);
     this.logger.log(
-      `Processed soroban event ${txHash}:${eventIndex} (${eventType})`,
+      { txHash, eventIndex, eventType },
+      'Processed soroban event',
     );
   }
 }

@@ -30,7 +30,10 @@ export class SorobanEventsService {
     private readonly projectRepo: Repository<ProjectRegistryEntity>,
   ) {}
 
-  async ingest(dto: IngestSorobanEventDto): Promise<{ queued: boolean }> {
+  async ingest(
+    dto: IngestSorobanEventDto,
+    requestId?: string,
+  ): Promise<{ queued: boolean }> {
     const jobId = `${dto.txHash}:${dto.eventIndex}`;
 
     await this.queue.add(PROCESS_EVENT_JOB, dto, {
@@ -41,7 +44,10 @@ export class SorobanEventsService {
       removeOnFail: { count: 200 },
     });
 
-    this.logger.debug(`Queued soroban event ${jobId}`);
+    this.logger.log(
+      { requestId, jobId, txHash: dto.txHash, eventIndex: dto.eventIndex },
+      'Queued soroban event',
+    );
     return { queued: true };
   }
 
