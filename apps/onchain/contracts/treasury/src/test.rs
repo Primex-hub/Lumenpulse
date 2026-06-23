@@ -1,6 +1,10 @@
 use super::*;
 use soroban_sdk::testutils::{Address as _, Ledger};
-use soroban_sdk::{token, Address, Env};
+use soroban_sdk::{token, Address, BytesN, Env};
+
+fn request_id(env: &Env) -> BytesN<32> {
+    BytesN::from_array(env, &[0; 32])
+}
 
 #[test]
 fn test_treasury_streaming() {
@@ -32,7 +36,7 @@ fn test_treasury_streaming() {
     let duration = 1000u64;
     env.ledger().set_timestamp(start_time);
 
-    treasury_client.allocate_budget(&admin, &beneficiary, &amount, &start_time, &duration);
+    treasury_client.allocate_budget(&admin, &beneficiary, &amount, &start_time, &duration, &request_id(&env));
 
     // Check unlocked at start_time (should be 0)
     assert_eq!(treasury_client.get_unlocked(&beneficiary), 0);
@@ -56,4 +60,40 @@ fn test_treasury_streaming() {
     // Claim rest
     treasury_client.claim(&beneficiary);
     assert_eq!(token_client.balance(&beneficiary), 1000);
+}
+
+#[test]
+fn test_allocate_budget_duplicate_request_id() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+
+    // Deploy token
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
+    // Deploy treasury
+    let treasury_id = env.register(TreasuryContract, ());
+    let treasury_client = TreasuryContractClient::new(&env, &treasury_id);
+
+    // Initialize
+    treasury_client.initialize(&admin, &token_id.address());
+
+    // Mint tokens to admin
+    let amount = 1000i128;
+    token_admin_client.mint(&admin, &amount);
+
+    let start_time = 1000u64;
+    let duration = 1000u64;
+    env.ledger().set_timestamp(start_time);
+
+    // First allocation should succeed
+    treasury_client.allocate_budget(&admin, &beneficiary, &amount, &start_time, &duration, &request_id(&env));
+
+    // Second allocation with same request_id should fail
+    let result = treasury_client.try_allocate_budget(&admin, &beneficiary, &amount, &start_time, &duration, &request_id(&env));
+    assert_eq!(result, Err(Ok(TreasuryError::AlreadyExecuted)));
 }

@@ -3,7 +3,7 @@
 mod events;
 mod storage;
 
-use soroban_sdk::{contract, contractimpl, contractclient, Address, Env, Symbol, Vec, vec, U32};
+use soroban_sdk::{contract, contractimpl, contractclient, Address, Env, Symbol, Vec, vec};
 use soroban_sdk::token::TokenClient;
 use storage::{DataKey, YieldProvider, ProviderMetrics};
 
@@ -108,7 +108,13 @@ impl YieldVaultContract {
         env: Env,
         amount: i128,
         user: Address,
+        request_id: soroban_sdk::BytesN<32>,
     ) -> Result<i128, Symbol> {
+        // Idempotency check
+        if idempotency_guard::claim_request(&env, &request_id).is_err() {
+            return Err(Symbol::new(&env, "already_executed"));
+        }
+
         if amount <= 0 {
             return Err(Symbol::new(&env, "invalid_amount"));
         }
@@ -194,7 +200,13 @@ impl YieldVaultContract {
         env: Env,
         amount: i128,
         user: Address,
+        request_id: soroban_sdk::BytesN<32>,
     ) -> Result<i128, Symbol> {
+        // Idempotency check
+        if idempotency_guard::claim_request(&env, &request_id).is_err() {
+            return Err(Symbol::new(&env, "already_executed"));
+        }
+
         if amount <= 0 {
             return Err(Symbol::new(&env, "invalid_amount"));
         }
@@ -413,5 +425,123 @@ impl YieldVaultContract {
         }
 
         Ok(best_id)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use soroban_sdk::testutils::Address as _;
+    use soroban_sdk::token::StellarAssetClient;
+
+    #[contract]
+    struct MockYieldProvider;
+
+    #[contractimpl]
+    impl MockYieldProvider {
+        pub fn deposit(env: Env, from: Address, amount: i128) -> i128 {
+            let current: i128 = env.storage().persistent().get(&from).unwrap_or(0);
+            env.storage().persistent().set(&from, &(current + amount));
+            amount // return same amount as "yield tokens"
+        }
+
+        pub fn withdraw(env: Env, to: Address, amount: i128) -> i128 {
+            let current: i128 = env.storage().persistent().get(&to).unwrap_or(0);
+            if current < amount {
+                panic!("insufficient balance in mock");
+            }
+            env.storage().persistent().set(&to, &(current - amount));
+            amount
+        }
+
+        pub fn balance(env: Env, address: Address) -> i128 {
+            env.storage().persistent().get(&address).unwrap_or(0)
+        }
+    }
+
+    fn request_id(env: &Env) -> soroban_sdk::BytesN<32> {
+        soroban_sdk::BytesN::from_array(env, &[0; 32])
+    }
+
+    #[test]
+    fn test_deposit_idempotency() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let user = Address::generate(&env);
+        let token_admin = Address::generate(&env);
+
+        let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+        let token_client = TokenClient::new(&env, &token_id.address());
+        let token_admin_client = StellarAssetClient::new(&env, &token_id.address());
+
+        // Deploy vault and mock provider
+        let vault_id = env.register(YieldVaultContract, ());
+        let vault_client = YieldProviderClient::new(&env, &vault_id);
+
+        let mock_id = env.register(MockYieldProvider, ());
+
+        // Initialize vault
+        vault_client.initialize(&admin, &token_id.address());
+
+        // Register mock provider
+        vault_client.register_provider(
+            &Symbol::new(&env, "mock_provider"),
+            &mock_id,
+            &1, // priority
+        );
+
+        // Mint tokens to user
+        let deposit_amount = 1000i128;
+        token_admin_client.mint(&user, &deposit_amount);
+
+        // First deposit should succeed
+        let result = vault_client.deposit(&deposit_amount, &user, &request_id(&env));
+        assert_eq!(result, deposit_amount);
+
+        // Second deposit with same request_id should fail
+        let result = vault_client.try_deposit(&deposit_amount, &user, &request_id(&env));
+        assert_eq!(result, Err(Ok(Symbol::new(&env, "already_executed"))));
+    }
+
+    #[test]
+    fn test_withdraw_idempotency() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let user = Address::generate(&env);
+        let token_admin = Address::generate(&env);
+
+        let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+        let token_client = TokenClient::new(&env, &token_id.address());
+        let token_admin_client = StellarAssetClient::new(&env, &token_id.address());
+
+        let vault_id = env.register(YieldVaultContract, ());
+        let vault_client = YieldProviderClient::new(&env, &vault_id);
+
+        let mock_id = env.register(MockYieldProvider, ());
+
+        vault_client.initialize(&admin, &token_id.address());
+        vault_client.register_provider(
+            &Symbol::new(&env, "mock_provider"),
+            &mock_id,
+            &1,
+        );
+
+        // Mint tokens to user and deposit
+        let deposit_amount = 1000i128;
+        token_admin_client.mint(&user, &deposit_amount);
+        vault_client.deposit(&deposit_amount, &user, &BytesN::from_array(&env, &[1; 32]));
+
+        // First withdraw should succeed
+        let withdraw_amount = 500i128;
+        let result = vault_client.withdraw(&withdraw_amount, &user, &request_id(&env));
+        assert_eq!(result, withdraw_amount);
+
+        // Second withdraw with same request_id should fail
+        let result = vault_client.try_withdraw(&withdraw_amount, &user, &request_id(&env));
+        assert_eq!(result, Err(Ok(Symbol::new(&env, "already_executed"))));
     }
 }

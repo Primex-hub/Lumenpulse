@@ -13,4 +13,5 @@ pub enum TreasuryError {
     StreamNotFound = 7,
     NothingToClaim = 8,
     Reentrancy = 9,
+    AlreadyExecuted = 10,
 }
