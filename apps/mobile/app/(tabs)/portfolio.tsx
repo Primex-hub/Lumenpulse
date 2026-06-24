@@ -65,9 +65,9 @@ function AssetRow({ asset, colors, t }: { asset: AssetBalance; colors: any; t: (
   const color = assetColor(asset.assetCode);
 
   return (
-    <View style={[styles.assetRow, { borderBottomColor: colors.border }]} accessible>
-      <View style={[styles.assetIcon, { backgroundColor: `${color}22` }]} accessible>
-        <Text style={{ color }} accessible>
+    <View style={[styles.assetRow, { borderBottomColor: colors.border }]} accessible accessibilityRole="listitem">
+      <View style={[styles.assetIcon, { backgroundColor: `${color}22` }]} importantForAccessibility="no">
+        <Text style={{ color }} importantForAccessibility="no">
           {asset.assetCode[0]}
         </Text>
       </View>
@@ -90,13 +90,12 @@ function AssetRow({ asset, colors, t }: { asset: AssetBalance; colors: any; t: (
 
 function RecentTransactionItem({ tx, colors, t }: { tx: Transaction; colors: any; t: (key: string) => string }) {
   return (
-    <View style={[styles.assetRow, { borderBottomColor: colors.border }]} accessible>
+    <View style={[styles.assetRow, { borderBottomColor: colors.border }]} accessible accessibilityRole="listitem">
       <Ionicons
         name={getTransactionIcon(tx.type) as any}
         size={20}
         color={colors.accent}
-        accessible
-        accessibilityLabel={tx.type}
+        importantForAccessibility="no"
       />
       <Text style={{ marginLeft: 10, color: colors.text }} accessible>
         {tx.type} • {formatTransactionDate(tx.date)}
@@ -186,9 +185,9 @@ export default function PortfolioScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       {isStale && (
-        <View style={[styles.staleIndicator, { backgroundColor: colors.warning + '22' }]} accessible>
-          <Ionicons name="cloud-offline-outline" size={16} color={colors.warning} />
-          <Text style={[styles.staleText, { color: colors.warning }]} accessible>
+        <View style={[styles.staleIndicator, { backgroundColor: colors.warning + '22' }]} accessible accessibilityRole="alert" accessibilityLabel={t('portfolio.showing_cached')}>
+          <Ionicons name="cloud-offline-outline" size={16} color={colors.warning} importantForAccessibility="no" />
+          <Text style={[styles.staleText, { color: colors.warning }]} importantForAccessibility="no">
             {t('portfolio.showing_cached')}
           </Text>
         </View>
@@ -219,7 +218,7 @@ export default function PortfolioScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} accessibilityLabel="Pull to refresh portfolio" />}
         ListEmptyComponent={
           !loading ? (
-            <View style={styles.center} accessible accessibilityLabel="Portfolio empty">
+            <View style={styles.center} accessible accessibilityLabel={t('portfolio.no_assets')}>
               <Text style={{ color: colors.text }} accessible>{t('portfolio.no_assets')}</Text>
             </View>
           ) : null
@@ -234,6 +233,7 @@ export default function PortfolioScreen() {
         removeClippedSubviews
         accessibilityLabel={t('portfolio.title')}
         accessibilityRole="list"
+        accessibilityHint={t('portfolio.total_balance')}
       />
     </SafeAreaView>
   );

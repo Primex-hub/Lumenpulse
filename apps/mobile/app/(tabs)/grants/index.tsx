@@ -73,7 +73,7 @@ function RoundCard({
       </View>
 
       <View style={styles.poolRow}>
-        <Ionicons name="wallet-outline" size={16} color={colors.accent} />
+        <Ionicons name="wallet-outline" size={16} color={colors.accent} importantForAccessibility="no" />
         <Text style={[styles.poolLabel, { color: colors.textSecondary }]} accessible>
           {t('grants.matching_pool')}
         </Text>
@@ -83,7 +83,7 @@ function RoundCard({
       </View>
 
       <View style={styles.cardFooter}>
-        <Ionicons name="calendar-outline" size={13} color={colors.textSecondary} />
+        <Ionicons name="calendar-outline" size={13} color={colors.textSecondary} importantForAccessibility="no" />
         <Text style={[styles.footerText, { color: colors.textSecondary }]} accessible>
           {t('grants.ends')} {endDate}
         </Text>
@@ -92,6 +92,7 @@ function RoundCard({
           size={14}
           color={colors.textSecondary}
           style={{ marginLeft: 'auto' }}
+          importantForAccessibility="no"
         />
       </View>
     </TouchableOpacity>
@@ -154,8 +155,7 @@ function GrantsListContent() {
           size={52}
           color={colors.danger}
           style={{ marginBottom: 16 }}
-          accessible
-          accessibilityLabel={t('errors.couldnt_load', { item: 'rounds' })}
+          importantForAccessibility="no"
         />
         <Text style={[styles.emptyTitle, { color: colors.text }]} accessible accessibilityRole="header">
           {t('errors.couldnt_load', { item: 'rounds' })}
@@ -203,16 +203,15 @@ function GrantsListContent() {
           </View>
         }
         ListEmptyComponent={
-          <View style={[styles.center, { paddingVertical: 60 }]} accessible accessibilityLabel="No grant rounds">
+          <View style={[styles.center, { paddingVertical: 60 }]} accessible accessibilityLabel={t('grants.no_rounds')}>
             <Ionicons
               name="trophy-outline"
               size={48}
               color={colors.textSecondary}
               style={{ marginBottom: 12 }}
-              accessible
-              accessibilityLabel={t('grants.title')}
+              importantForAccessibility="no"
             />
-            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]} accessible>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]} importantForAccessibility="no">
               {t('grants.no_rounds')}
             </Text>
           </View>
@@ -222,6 +221,7 @@ function GrantsListContent() {
         )}
         accessibilityLabel={t('grants.title')}
         accessibilityRole="list"
+        accessibilityHint={t('grants.description')}
       />
     </SafeAreaView>
   );

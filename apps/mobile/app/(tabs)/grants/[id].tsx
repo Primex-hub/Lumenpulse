@@ -51,11 +51,12 @@ function QfBar({
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
   return (
-    <View style={styles.qfTrack} accessible accessibilityLabel={`${share.toFixed(1)}% of pool`}>
+    <View style={styles.qfTrack}>
       <View
         style={[styles.qfFill, { width: `${share}%`, backgroundColor: colors.accent }]}
         accessibilityRole="progressbar"
         accessibilityValue={{ min: 0, max: 100, now: share }}
+        accessibilityLabel={`${share.toFixed(1)}% of pool`}
       />
     </View>
   );
@@ -82,6 +83,7 @@ function ProjectRow({
     <View
       style={[styles.projectCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
       accessible
+      accessibilityRole="listitem"
       accessibilityLabel={`${t('grants.project')} ${item.projectId}, ${item.contributorCount} ${t('grants.contributors')}, ${formatTokenAmount(item.totalContributions)} XLM contributed`}
     >
       <View style={styles.projectHeader}>
@@ -186,8 +188,7 @@ function GrantRoundDetailContent() {
           size={52}
           color={colors.danger}
           style={{ marginBottom: 16 }}
-          accessible
-          accessibilityLabel={t('errors.error')}
+          importantForAccessibility="no"
         />
         <Text
           style={[styles.errorText, { color: colors.text }]}
@@ -277,9 +278,10 @@ function GrantRoundDetailContent() {
         <View
           style={[styles.infoBox, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
           accessible
+          accessibilityLabel={t('grants.qf_explanation')}
         >
-          <Ionicons name="information-circle-outline" size={18} color={colors.accent} />
-          <Text style={[styles.infoBoxText, { color: colors.textSecondary }]} accessible>
+          <Ionicons name="information-circle-outline" size={18} color={colors.accent} importantForAccessibility="no" />
+          <Text style={[styles.infoBoxText, { color: colors.textSecondary }]} importantForAccessibility="no">
             {t('grants.qf_explanation')}
           </Text>
         </View>
@@ -297,16 +299,18 @@ function GrantRoundDetailContent() {
             {t('grants.no_rounds')}
           </Text>
         ) : (
-          projects.map((p, idx) => (
-            <ProjectRow
-              key={p.projectId}
-              item={p}
-              rank={idx}
-              poolBalance={poolBalance}
-              colors={colors}
-              t={t}
-            />
-          ))
+          <View accessibilityRole="list">
+            {projects.map((p, idx) => (
+              <ProjectRow
+                key={p.projectId}
+                item={p}
+                rank={idx}
+                poolBalance={poolBalance}
+                colors={colors}
+                t={t}
+              />
+            ))}
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
