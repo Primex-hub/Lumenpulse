@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useLocalization } from '../../../src/context';
+import ProtectedRoute from '../../../components/ProtectedRoute';
 import { grantsApi, GrantRound, roundStatusLabel } from '../../../lib/grants';
 import { formatTokenAmount } from '../../../lib/stellar';
 
@@ -97,7 +98,7 @@ function RoundCard({
   );
 }
 
-export default function GrantsScreen() {
+function GrantsListContent() {
   const { colors } = useTheme();
   const { t } = useLocalization();
   const router = useRouter();
@@ -223,6 +224,14 @@ export default function GrantsScreen() {
         accessibilityRole="list"
       />
     </SafeAreaView>
+  );
+}
+
+export default function GrantsScreen() {
+  return (
+    <ProtectedRoute>
+      <GrantsListContent />
+    </ProtectedRoute>
   );
 }
 

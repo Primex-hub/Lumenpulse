@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useLocalization } from '../../../src/context';
+import ProtectedRoute from '../../../components/ProtectedRoute';
 import {
   grantsApi,
   RoundSummary,
@@ -133,7 +134,7 @@ function ProjectRow({
   );
 }
 
-export default function GrantRoundDetailScreen() {
+function GrantRoundDetailContent() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
   const { t } = useLocalization();
@@ -309,6 +310,14 @@ export default function GrantRoundDetailScreen() {
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+export default function GrantRoundDetailScreen() {
+  return (
+    <ProtectedRoute>
+      <GrantRoundDetailContent />
+    </ProtectedRoute>
   );
 }
 
