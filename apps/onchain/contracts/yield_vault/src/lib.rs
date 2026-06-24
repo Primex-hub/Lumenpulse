@@ -3,9 +3,9 @@
 mod events;
 mod storage;
 
-use soroban_sdk::{contract, contractimpl, contractclient, Address, Env, Symbol, Vec, vec};
 use soroban_sdk::token::TokenClient;
-use storage::{DataKey, YieldProvider, ProviderMetrics};
+use soroban_sdk::{contract, contractclient, contractimpl, vec, Address, Env, Symbol, Vec};
+use storage::{DataKey, ProviderMetrics, YieldProvider};
 
 #[contractclient(name = "YieldProviderClient")]
 pub trait YieldProviderTrait {
@@ -28,11 +28,7 @@ pub struct YieldVaultContract;
 #[contractimpl]
 impl YieldVaultContract {
     /// Initialize the vault
-    pub fn initialize(
-        env: Env,
-        admin: Address,
-        asset: Address,
-    ) -> Result<(), Symbol> {
+    pub fn initialize(env: Env, admin: Address, asset: Address) -> Result<(), Symbol> {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(Symbol::new(&env, "already_initialized"));
         }
@@ -42,8 +38,7 @@ impl YieldVaultContract {
         env.storage().instance().set(&DataKey::ProviderCount, &0u32);
         env.storage().instance().bump(100, 100);
 
-        events::VaultInitializedEvent { admin, asset }
-            .publish(&env);
+        events::VaultInitializedEvent { admin, asset }.publish(&env);
 
         Ok(())
     }
@@ -165,7 +160,10 @@ impl YieldVaultContract {
         let user_allocation: i128 = env
             .storage()
             .persistent()
-            .get(&DataKey::UserProviderAllocation(user.clone(), best_provider))
+            .get(&DataKey::UserProviderAllocation(
+                user.clone(),
+                best_provider,
+            ))
             .unwrap_or(0);
 
         env.storage().persistent().set(
@@ -243,7 +241,11 @@ impl YieldVaultContract {
                 .unwrap_or(0);
 
             if allocation > 0 {
-                let to_withdraw = if remaining > allocation { allocation } else { remaining };
+                let to_withdraw = if remaining > allocation {
+                    allocation
+                } else {
+                    remaining
+                };
 
                 let provider: YieldProvider = env
                     .storage()
@@ -268,10 +270,9 @@ impl YieldVaultContract {
                         &new_allocation,
                     );
                 } else {
-                    env.storage().persistent().remove(&DataKey::UserProviderAllocation(
-                        user.clone(),
-                        provider_id,
-                    ));
+                    env.storage()
+                        .persistent()
+                        .remove(&DataKey::UserProviderAllocation(user.clone(), provider_id));
                 }
 
                 withdrawn += to_withdraw;
@@ -313,10 +314,7 @@ impl YieldVaultContract {
 
     /// Harvest yield earned by a specific provider
     /// Routes yield to a reward pool or redistributes to LPs
-    pub fn harvest_yield(
-        env: Env,
-        provider_id: u32,
-    ) -> Result<i128, Symbol> {
+    pub fn harvest_yield(env: Env, provider_id: u32) -> Result<i128, Symbol> {
         let admin: Address = env
             .storage()
             .instance()
@@ -524,11 +522,7 @@ mod test {
         let mock_id = env.register(MockYieldProvider, ());
 
         vault_client.initialize(&admin, &token_id.address());
-        vault_client.register_provider(
-            &Symbol::new(&env, "mock_provider"),
-            &mock_id,
-            &1,
-        );
+        vault_client.register_provider(&Symbol::new(&env, "mock_provider"), &mock_id, &1);
 
         // Mint tokens to user and deposit
         let deposit_amount = 1000i128;

@@ -36,7 +36,14 @@ fn test_treasury_streaming() {
     let duration = 1000u64;
     env.ledger().set_timestamp(start_time);
 
-    treasury_client.allocate_budget(&admin, &beneficiary, &amount, &start_time, &duration, &request_id(&env));
+    treasury_client.allocate_budget(
+        &admin,
+        &beneficiary,
+        &amount,
+        &start_time,
+        &duration,
+        &request_id(&env),
+    );
 
     // Check unlocked at start_time (should be 0)
     assert_eq!(treasury_client.get_unlocked(&beneficiary), 0);
@@ -91,9 +98,23 @@ fn test_allocate_budget_duplicate_request_id() {
     env.ledger().set_timestamp(start_time);
 
     // First allocation should succeed
-    treasury_client.allocate_budget(&admin, &beneficiary, &amount, &start_time, &duration, &request_id(&env));
+    treasury_client.allocate_budget(
+        &admin,
+        &beneficiary,
+        &amount,
+        &start_time,
+        &duration,
+        &request_id(&env),
+    );
 
     // Second allocation with same request_id should fail
-    let result = treasury_client.try_allocate_budget(&admin, &beneficiary, &amount, &start_time, &duration, &request_id(&env));
+    let result = treasury_client.try_allocate_budget(
+        &admin,
+        &beneficiary,
+        &amount,
+        &start_time,
+        &duration,
+        &request_id(&env),
+    );
     assert_eq!(result, Err(Ok(TreasuryError::AlreadyExecuted)));
 }
