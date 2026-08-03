@@ -14,6 +14,7 @@ import { TestExceptionController } from './test-exception.controller';
 import { SentimentModule } from './sentiment/sentiment.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { AppCacheModule } from './cache/cache.module';
+import { WarmCacheModule } from './cache/warm-cache.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { StellarModule } from './stellar/stellar.module';
 import { PriceModule } from './price/price.module';
@@ -30,6 +31,7 @@ import databaseConfig from './database/database.config';
 import stellarConfig from './stellar/config/stellar.config';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
+import { RequestContextService } from './common/services/request-context.service';
 import { RateLimitGuard } from './common/rate-limit/rate-limit.guard';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 import { RateLimitStorageService } from './common/rate-limit/rate-limit.storage';
@@ -54,11 +56,20 @@ import { SignalsModule } from './signals/signals.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AppConfigModule } from './config/config.module';
 import { CrowdfundModule } from './crowdfund/crowdfund.module';
+import { ContributorRegistryModule } from './contributor-registry/contributor-registry.module';
 import { AuditModule } from './audit/audit.module';
 import { AuditLogInterceptor } from './audit/interceptors/audit-log.interceptor';
 import { SorobanEventsModule } from './soroban-events/soroban-events.module';
 import { TreasuryModule } from './treasury/treasury.module';
 import { VestingWalletModule } from './vesting-wallet/vesting-wallet.module';
+import { VerificationRequestsModule } from './verification-requests/verification-requests.module';
+import { ContractsModule } from './contracts/contracts.module';
+import { ContractAdminModule } from './contract-admin/contract-admin.module';
+import { ReviewMetricsModule } from './review-metrics/review-metrics.module';
+import { BotAuthModule } from './bot-auth/bot-auth.module';
+import { DemoBootstrapModule } from './demo-bootstrap/demo-bootstrap.module';
+import { ContributorFeedModule } from './contributor-feed/contributor-feed.module';
+import { ReadModelRebuildModule } from './read-model-rebuild';
 
 @Module({
   imports: [
@@ -97,6 +108,7 @@ import { VestingWalletModule } from './vesting-wallet/vesting-wallet.module';
       },
     }),
     AppCacheModule,
+    WarmCacheModule,
     MetricsModule,
     SentimentModule,
     PortfolioModule,
@@ -113,6 +125,7 @@ import { VestingWalletModule } from './vesting-wallet/vesting-wallet.module';
     ExchangeRatesModule,
     GrantsModule,
     VerificationModule,
+    VerificationRequestsModule,
     WatchlistModule,
     OutboxModule,
     ExportModule,
@@ -123,15 +136,24 @@ import { VestingWalletModule } from './vesting-wallet/vesting-wallet.module';
     SearchModule,
     FeatureFlagsModule,
     CrowdfundModule,
+    ContributorRegistryModule,
     AppConfigModule,
     AuditModule,
     SorobanEventsModule,
     TreasuryModule,
     VestingWalletModule,
+    ContractsModule,
+    ContractAdminModule,
+    ReviewMetricsModule,
+    BotAuthModule,
+    DemoBootstrapModule,
+    ContributorFeedModule,
+    ReadModelRebuildModule,
   ],
   controllers: [AppController, TestController, TestExceptionController],
   providers: [
     AppService,
+    RequestContextService,
     {
       provide: APP_GUARD,
       useClass: RateLimitGuard,

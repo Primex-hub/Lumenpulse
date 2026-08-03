@@ -1,6 +1,13 @@
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from prometheus_client import start_http_server
 
+CONTRACT_INGESTION_LAG_SECONDS = Gauge(
+    "lumenpulse_contract_ingestion_lag_seconds",
+    "Seconds of lag between the latest on-chain event timestamp and the latest "
+    "processed event timestamp for each contract domain",
+    ["domain"],
+)
+
 # Define simple Prometheus counters
 JOBS_RUN_TOTAL = Counter(
     "jobs_run", 
@@ -49,6 +56,19 @@ SOURCE_HEALTH = Gauge(
     "1 when the source last fetch succeeded, 0 when unhealthy",
     ["source"],
 )
+
+ALERT_SUPPRESSIONS_TOTAL = Counter(
+    "lumenpulse_alert_suppressions_total",
+    "Total number of alerts suppressed by the dedup engine",
+    ["rule_name", "reason"],
+)
+
+ALERT_EMISSIONS_TOTAL = Counter(
+    "lumenpulse_alert_emissions_total",
+    "Total number of alerts emitted by the dedup engine",
+    ["rule_name", "reason"],
+)
+
 
 def start_metrics_server(port: int = 9090):
     """Start standalone prometheus metrics server (for background workers)"""

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -14,26 +13,64 @@ import { useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useTheme } from '../../../contexts/ThemeContext';
-import { crowdfundApi, CrowdfundProject, Contributor, RoadmapItem, OnChainStatus } from '../../../lib/crowdfund';
+import {
+  crowdfundApi,
+  CrowdfundProject,
+  Contributor,
+  RoadmapItem,
+  OnChainStatus,
+} from '../../../lib/crowdfund';
 import { computeFundingProgress, formatTokenAmount } from '../../../lib/stellar';
 import ContributionModal from '../../../components/ContributionModal';
+import { requireBiometricConfirmation } from '../../../lib/biometric-lock';
 import VerificationPanel from '../../../components/VerificationPanel';
 import { usersApi } from '../../../lib/api';
 import { storage } from '../../../lib/storage';
-import { moderationApi, ReportType, ReportReason } from '../../../lib/moderation';
+import { ReportType } from '../../../lib/moderation';
+import ReportContentModal from '../../../components/ReportContentModal';
 import { useWallet } from '../../../contexts/WalletContext';
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 const ON_CHAIN_STATUS_META: Record<
   OnChainStatus,
-  { label: string; description: string; icon: React.ComponentProps<typeof Ionicons>['name']; colorKey: 'success' | 'warning' | 'danger' | 'accent' | 'textSecondary' }
+  {
+    label: string;
+    description: string;
+    icon: React.ComponentProps<typeof Ionicons>['name'];
+    colorKey: 'success' | 'warning' | 'danger' | 'accent' | 'textSecondary';
+  }
 > = {
-  ACTIVE: { label: 'Active', description: 'Accepting contributions on-chain', icon: 'radio-button-on-outline', colorKey: 'success' },
-  PAUSED: { label: 'Paused', description: 'Contributions temporarily paused', icon: 'pause-circle-outline', colorKey: 'warning' },
-  COMPLETED: { label: 'Completed', description: 'Funding goal reached — vault closed', icon: 'checkmark-circle-outline', colorKey: 'accent' },
-  CANCELLED: { label: 'Cancelled', description: 'Project cancelled — funds returned', icon: 'close-circle-outline', colorKey: 'danger' },
-  PENDING: { label: 'Pending', description: 'Contract deployment in progress', icon: 'time-outline', colorKey: 'textSecondary' },
+  ACTIVE: {
+    label: 'Active',
+    description: 'Accepting contributions on-chain',
+    icon: 'radio-button-on-outline',
+    colorKey: 'success',
+  },
+  PAUSED: {
+    label: 'Paused',
+    description: 'Contributions temporarily paused',
+    icon: 'pause-circle-outline',
+    colorKey: 'warning',
+  },
+  COMPLETED: {
+    label: 'Completed',
+    description: 'Funding goal reached — vault closed',
+    icon: 'checkmark-circle-outline',
+    colorKey: 'accent',
+  },
+  CANCELLED: {
+    label: 'Cancelled',
+    description: 'Project cancelled — funds returned',
+    icon: 'close-circle-outline',
+    colorKey: 'danger',
+  },
+  PENDING: {
+    label: 'Pending',
+    description: 'Contract deployment in progress',
+    icon: 'time-outline',
+    colorKey: 'textSecondary',
+  },
 };
 
 function OnChainStatusChip({
@@ -55,7 +92,9 @@ function OnChainStatusChip({
       <Ionicons name={meta.icon} size={16} color={color} />
       <View>
         <Text style={[styles.statusChipLabel, { color }]}>{meta.label}</Text>
-        <Text style={[styles.statusChipDesc, { color: colors.textSecondary }]}>{meta.description}</Text>
+        <Text style={[styles.statusChipDesc, { color: colors.textSecondary }]}>
+          {meta.description}
+        </Text>
       </View>
     </View>
   );
@@ -64,7 +103,12 @@ function OnChainStatusChip({
 function ProgressBar({ progress, color }: { progress: number; color: string }) {
   return (
     <View style={styles.progressTrack}>
-      <View style={[styles.progressFill, { width: `${Math.min(progress, 100)}%`, backgroundColor: color }]} />
+      <View
+        style={[
+          styles.progressFill,
+          { width: `${Math.min(progress, 100)}%`, backgroundColor: color },
+        ]}
+      />
     </View>
   );
 }
@@ -170,7 +214,7 @@ export default function ProjectDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showContributeModal, setShowContributeModal] = useState(false);
   const { publicKey: stellarPublicKey, signAndSubmitXdr } = useWallet();
-  const [isReporting, setIsReporting] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const projectId = parseInt(id ?? '0', 10);
 
@@ -215,6 +259,11 @@ export default function ProjectDetailScreen() {
       return { errorMessage: 'No Stellar account linked. Please link one in Settings first.' };
     }
 
+    const isConfirmed = await requireBiometricConfirmation('Confirm your identity to contribute');
+    if (!isConfirmed) {
+      return { errorMessage: 'Biometric confirmation failed or cancelled.' };
+    }
+
     try {
       const response = await crowdfundApi.contribute({
         projectId,
@@ -225,16 +274,20 @@ export default function ProjectDetailScreen() {
       if (response.success && response.data) {
         let finalTxHash = response.data.transactionHash;
 
-        // Use wallet signing if backend requests client signature (or mock for Testnet app flow)
-        if (response.data.unsignedXdr || !finalTxHash) {
-          const xdrToSign = response.data.unsignedXdr || "AAAA_MOCK_XDR_FOR_TESTNET_DEMO";
-          const signResult = await signAndSubmitXdr(xdrToSign);
+        // Use wallet signing when the backend requests a client-side signature.
+        // The backend must provide a real unsigned XDR; there is no mock fallback.
+        if (response.data.unsignedXdr) {
+          const signResult = await signAndSubmitXdr(response.data.unsignedXdr);
 
           if (signResult.status === 'rejected') {
             return { errorMessage: 'Transaction signature rejected by the wallet.' };
           }
           if (signResult.status === 'failed' || !signResult.txHash) {
-            return { errorMessage: 'Wallet signing failed.' };
+            return {
+              errorMessage:
+                signResult.error?.message ??
+                'Wallet signing failed. Please check your wallet app and try again.',
+            };
           }
           finalTxHash = signResult.txHash;
         }
@@ -248,34 +301,6 @@ export default function ProjectDetailScreen() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Network error. Please try again.';
       return { errorMessage: message };
-    }
-  };
-
-  const handleReport = async (reason: ReportReason) => {
-    if (isReporting || !project) return;
-
-    setIsReporting(true);
-    try {
-      const response = await moderationApi.createReport({
-        targetType: ReportType.PROJECT,
-        targetId: String(projectId),
-        reason,
-        description: `Project reported: ${project.name}`,
-      });
-
-      if (response.success) {
-        Alert.alert(
-          'Report Submitted',
-          'Thank you. Your report has been submitted for review by our moderation team.',
-        );
-      } else {
-        Alert.alert('Error', response.error?.message || 'Failed to submit report.');
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to submit report.';
-      Alert.alert('Error', message);
-    } finally {
-      setIsReporting(false);
     }
   };
 
@@ -456,23 +481,9 @@ export default function ProjectDetailScreen() {
         {/* Report button */}
         <TouchableOpacity
           style={[styles.reportButton, { borderColor: colors.border }]}
-          onPress={() => {
-            Alert.alert('Report Project', 'Why are you reporting this project?', [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Spam',
-                onPress: () => void handleReport(ReportReason.SPAM),
-              },
-              {
-                text: 'Fraud',
-                onPress: () => void handleReport(ReportReason.FRAUD),
-              },
-              {
-                text: 'Misleading',
-                onPress: () => void handleReport(ReportReason.MISLEADING_INFO),
-              },
-            ]);
-          }}
+          onPress={() => setShowReportModal(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Report this project"
         >
           <Ionicons name="flag-outline" size={16} color={colors.danger} />
           <Text style={[styles.reportButtonText, { color: colors.danger }]}>
@@ -523,6 +534,15 @@ export default function ProjectDetailScreen() {
         projectName={project.name}
         onClose={() => setShowContributeModal(false)}
         onSubmit={handleContribute}
+      />
+
+      {/* Report modal */}
+      <ReportContentModal
+        visible={showReportModal}
+        targetType={ReportType.PROJECT}
+        targetId={String(projectId)}
+        targetLabel={project.name}
+        onClose={() => setShowReportModal(false)}
       />
     </SafeAreaView>
   );

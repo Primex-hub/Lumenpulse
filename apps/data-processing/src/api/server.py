@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 FastAPI server to expose sentiment analysis as an HTTP API
 for the Node.js backend to consume.
@@ -32,6 +33,7 @@ from src.db import PostgresService
 from src.ingestion.stellar_ingestion_checks import run_all_checks
 
 from src.analytics.sentiment_indicators import SentimentIndicatorMapper, get_legend as sentiment_legend
+from src.api.rebuild_routes import router as rebuild_router
 
 _indicator_mapper = SentimentIndicatorMapper()
 
@@ -68,6 +70,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.middleware("http")
 async def metrics_and_logging_middleware(request: Request, call_next):
     corr_id = request.headers.get("X-Correlation-ID", generate_correlation_id())
@@ -83,12 +86,23 @@ async def metrics_and_logging_middleware(request: Request, call_next):
         logger.error("Unhandled exception during request processing", exc_info=True)
         raise
 
+
 # Initialize your existing SentimentAnalyzer
 sentiment_analyzer = SentimentAnalyzer()
 
-# Ingestion quality check routes
+# Import and register routers
 from src.api.ingestion_quality_routes import router as ingestion_quality_router
+from src.api.review_queue_routes import router as review_queue_router
+from src.api.ledger_cursor_routes import router as ledger_cursor_router
+from src.api.kpi_routes import router as kpi_router
+from src.api.account_operation_routes import router as account_operation_router
+
 app.include_router(ingestion_quality_router)
+app.include_router(review_queue_router)
+app.include_router(ledger_cursor_router)
+app.include_router(kpi_router)  # KPI routes for TVL and volume computation
+app.include_router(account_operation_router)  # Account operation ingestion
+app.include_router(rebuild_router)  # Rebuild routes for admin
 
 
 try:
@@ -158,10 +172,35 @@ class NewsArticleResponse(BaseModel):
     sentiment_label: Optional[str] = None  # positive / negative / neutral
     indicator: Optional[SentimentIndicatorResponse] = None  # Visual colour indicator
 
+
+class ContributorActivityEventResponse(BaseModel):
+    event_id: str
+    contract_id: str
+    project_id: Optional[int] = None
+    contributor: Optional[str] = None
+    ledger: int
+    timestamp: Optional[str] = None
+    event_type: Optional[str] = None
+    category: str
+    amount: Optional[float] = None
+    milestone_id: Optional[int] = None
+    status: Optional[str] = None
+    summary: Optional[str] = None
+    topics: List[str] = []
+    raw_data: Optional[Dict[str, Any]] = None
+
+
+class ContributorActivityTimelineResponse(BaseModel):
+    contributor: str
+    project_id: Optional[int] = None
+    events: List[ContributorActivityEventResponse] = []
+
+
 @app.get("/metrics")
 async def metrics():
     """Expose Prometheus metrics"""
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 
 @app.get("/")
 @limiter.limit("20/minute") if limiter else lambda x: x
@@ -177,17 +216,27 @@ async def root(request: Request) -> Dict[str, Any]:
             "POST /analyze": "Analyze text sentiment (requires X-API-Key header)",
             "GET /analyze": "Get asset-specific sentiment analysis (requires X-API-Key header)",
             "POST /analyze-batch": "Batch analyze multiple texts (requires X-API-Key header)",
+            "GET /contributors/{contributor}/timeline": "Get contributor activity timeline from on-chain events (requires X-API-Key header)",
             "GET /sentiment/legend": "Get colour legend for sentiment indicators (no auth required)",
+            # KPI endpoints (Issue #734)
+            "GET /api/kpi/latest": "Get latest KPI snapshot (TVL, Volume) (requires X-API-Key header)",
+            "GET /api/kpi/series": "Get KPI time series data (requires X-API-Key header)",
+            "POST /api/kpi/recompute": "Trigger KPI recompute from events (Admin only, requires X-API-Key header)",
+            "POST /api/kpi/recompute-async": "Trigger async KPI recompute (Admin only, requires X-API-Key header)",
+            # Account operation endpoints (Issue #743)
+            "POST /api/account-operations/ingest": "Ingest account operations from Horizon (Admin only, requires X-API-Key header)",
+            "GET /api/account-operations/status": "Get ingestion status (Admin only, requires X-API-Key header)",
+            "POST /api/account-operations/reset-cursor": "Reset ingestion cursor (Admin only, requires X-API-Key header)",
+            "GET /api/account-operations/operations": "Get account operations from database (Admin only, requires X-API-Key header)",
         },
         "note": "Returns sentiment score between -1 (negative) and 1 (positive)",
-        "security": "All endpoints except /health and /metrics require X-API-Key header",
+        "security": "All endpoints except /health, /metrics, and /sentiment/legend require X-API-Key header",
     }
 
 
 @app.get("/health", response_model=HealthResponse)
 @limiter.limit("30/minute") if limiter else lambda x: x
 async def health_check(request: Request) -> HealthResponse:
-
     """Health check endpoint for monitoring"""
     return HealthResponse(
         status="healthy",
@@ -263,6 +312,51 @@ async def get_news(
     except Exception as exc:
         logger.error("Error retrieving news: %s", str(exc), exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch news articles")
+
+
+@app.get(
+    "/contributors/{contributor}/timeline",
+    response_model=ContributorActivityTimelineResponse,
+)
+@limiter.limit("20/minute") if limiter else lambda x: x
+async def get_contributor_activity_timeline(
+    request: Request,
+    contributor: str,
+    project_id: Optional[int] = Query(
+        None,
+        description="Optional project ID to scope the contributor timeline",
+    ),
+    limit: int = Query(200, ge=1, le=500),
+    ascending: bool = Query(
+        True,
+        description="Order timeline ascending by timestamp if true, descending otherwise",
+    ),
+) -> ContributorActivityTimelineResponse:
+    """Return a contributor-centric timeline of raw on-chain activity."""
+    if postgres_service is None:
+        raise HTTPException(status_code=503, detail="Database service unavailable")
+
+    events = postgres_service.get_contributor_activity_timeline(
+        contributor=contributor,
+        project_id=project_id,
+        limit=limit,
+        ascending=ascending,
+    )
+
+    logger.info(
+        "Retrieved contributor timeline for %s | project_id=%s | limit=%d | ascending=%s | client_ip=%s",
+        contributor,
+        project_id,
+        limit,
+        ascending,
+        request.client.host,
+    )
+
+    return ContributorActivityTimelineResponse(
+        contributor=contributor,
+        project_id=project_id,
+        events=[ContributorActivityEventResponse(**event) for event in events],
+    )
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
@@ -660,4 +754,102 @@ async def analyze_lag_correlation(
         best_correlation=result["best_correlation"],
         lag_analysis=result["lag_analysis"],
         recommendation=result["recommendation"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Daily On-Chain KPI Snapshot Endpoints (#877)
+# ---------------------------------------------------------------------------
+
+
+class DailyKPISnapshotResponse(BaseModel):
+    snapshot_date: str
+    period: str
+    tvl: float
+    volume: float
+    active_rounds: int
+    contribution_count: int
+    unique_contributors: int
+    extra_data: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None
+
+
+class DailyKPISnapshotRunResponse(BaseModel):
+    status: str
+    message: str
+    date: str
+    period: str
+    tvl: float
+    volume: float
+    active_rounds: int
+    contribution_count: int
+    unique_contributors: int
+
+
+@app.get("/analytics/kpis/daily-snapshots", response_model=List[DailyKPISnapshotResponse])
+@limiter.limit("30/minute") if limiter else lambda x: x
+async def get_daily_kpi_snapshots(
+    request: Request,
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    period: str = Query("daily", description="Period type (default: daily)"),
+    limit: int = Query(100, ge=1, le=500),
+) -> List[DailyKPISnapshotResponse]:
+    """
+    Retrieve historical daily on-chain KPI snapshots.
+    Requires X-API-Key header.
+    """
+    if postgres_service is None:
+        raise HTTPException(status_code=503, detail="Database service unavailable")
+
+    snapshots = postgres_service.get_daily_onchain_kpi_snapshots(
+        start_date=start_date,
+        end_date=end_date,
+        period=period,
+        limit=limit,
+    )
+
+    return [
+        DailyKPISnapshotResponse(
+            snapshot_date=s.snapshot_date,
+            period=s.period,
+            tvl=s.tvl,
+            volume=s.volume,
+            active_rounds=s.active_rounds,
+            contribution_count=s.contribution_count,
+            unique_contributors=s.unique_contributors,
+            extra_data=s.extra_data,
+            created_at=s.created_at.isoformat() if s.created_at else None,
+        )
+        for s in snapshots
+    ]
+
+
+@app.post("/analytics/kpis/daily-snapshots/run", response_model=DailyKPISnapshotRunResponse)
+@limiter.limit("10/minute") if limiter else lambda x: x
+async def trigger_daily_kpi_snapshot(
+    request: Request,
+    target_date: Optional[str] = Query(None, description="Target date (YYYY-MM-DD)"),
+    period: str = Query("daily", description="Period identifier"),
+) -> DailyKPISnapshotRunResponse:
+    """
+    Trigger manual generation of a daily on-chain KPI snapshot.
+    Skips duplicate snapshot creation if a snapshot for target_date and period already exists.
+    Requires X-API-Key header.
+    """
+    from src.analytics.daily_kpi_snapshot import DailyKPISnapshotGenerator
+
+    generator = DailyKPISnapshotGenerator(db_service=postgres_service)
+    result = generator.run_snapshot(target_date=target_date, period=period)
+
+    return DailyKPISnapshotRunResponse(
+        status=result["status"],
+        message=result["message"],
+        date=result["date"],
+        period=result["period"],
+        tvl=result["tvl"],
+        volume=result["volume"],
+        active_rounds=result["active_rounds"],
+        contribution_count=result["contribution_count"],
+        unique_contributors=result["unique_contributors"],
     )

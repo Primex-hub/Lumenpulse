@@ -5,10 +5,11 @@ import Link from "next/link";
 import { Wallet, Info, Bookmark } from "lucide-react";
 import { useStellarConfig } from "@/contexts/StellarConfigContext";
 import { useStellarWallet } from "@/app/providers";
-import { useWatchlist } from "@/contexts/WatchlistContext";
+import { useWatchlist } from "@/hooks/use-watchlist";
 import { TransactionReceiptModal } from "@/components/TransactionReceiptModal";
 import { WalletReadinessBanner } from "@/components/WalletReadinessBanner";
 import { useWalletReadiness } from "@/hooks/useWalletReadiness";
+import { ReportButton } from "@/components/report/report-button";
 import { signTransaction } from "@stellar/freighter-api";
 import { Address, Contract, TransactionBuilder, nativeToScVal, rpc } from "@stellar/stellar-sdk";
 import { useExplorerUrl } from "@/hooks/useExplorerUrl";
@@ -345,6 +346,13 @@ export function ProjectAllocationRow({
         <span className={`text-sm font-bold w-6 ${rankColors[rank] ?? "text-foreground/40"}`}>#{rank + 1}</span>
         <span className="flex-1 font-medium text-sm">Project #{item.projectId}</span>
         <span className="text-primary font-bold text-sm">~{formatAmount(item.estimatedMatch)} XLM</span>
+        <ReportButton
+          targetType="project"
+          targetId={String(item.projectId)}
+          targetLabel={`Project #${item.projectId}`}
+          variant="icon"
+          className="!p-1.5 bg-transparent hover:bg-red-500/10"
+        />
       </div>
 
       <QfBar share={share} />
